@@ -78,7 +78,6 @@ impl ObjectList {
     ) -> Option<MeshData> {
         if self.meshes.contains_key(mesh_path) {
             // Already loaded
-            println!("Already loaded mesh");
             return None;
         }
 
@@ -103,7 +102,6 @@ impl ObjectList {
     ) -> Option<Index<material::Material>> {
         if self.materials.contains_key(material) {
             // Already loaded
-            println!("Already loaded material");
             return None;
         }
 
