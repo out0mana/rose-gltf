@@ -12,21 +12,15 @@ use bytes::{BufMut, BytesMut};
 use glam::{Quat, Vec3};
 use gltf::{
     animation::{
-        util::{ReadOutputs, Rotations},
-        Interpolation,
-    },
-    mesh::util::{ReadColors, ReadIndices, ReadJoints, ReadTexCoords, ReadWeights},
+        Interpolation, util::{ReadOutputs, Rotations}
+    }, binary, mesh::{Mode, util::{ReadColors, ReadIndices, ReadJoints, ReadTexCoords, ReadWeights}}
 };
 use gltf_json::{
-    buffer, scene, texture,
-    validation::{Checked, USize64},
-    Index,
+    Index, buffer, mesh::Primitive, scene, texture, validation::{Checked, USize64}
 };
 use rose_file_lib::{
     files::{
-        zmd::Bone,
-        zms::{Vertex, VertexFormat},
-        STB, ZMD, ZMO, ZMS, ZON, ZSC,
+        STB, ZMD, ZMO, ZMS, ZON, ZSC, zmd::Bone, zms::{Vertex, VertexFormat}, zsc::{Model, ModelList, ModelMaterial, ModelPart}
     },
     io::RoseFile,
     utils::{Quaternion, Vector3},
@@ -92,6 +86,17 @@ fn find_assets_root_path(file_path: &Path) -> Option<PathBuf> {
     None
 }
 
+pub fn file_name_from_path (
+    file_path: &PathBuf
+) -> String {
+    return file_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default()
+        .to_string();
+}
+
 pub fn rose_to_gltf(
     input_files: &[PathBuf],
     options: &RoseGltfConvOptions,
@@ -111,6 +116,9 @@ pub fn rose_to_gltf(
             ("zms", "zms") => std::cmp::Ordering::Equal,
             ("zms", _) => std::cmp::Ordering::Less,
             (_, "zms") => std::cmp::Ordering::Greater,
+            ("txt", "txt") => std::cmp::Ordering::Equal,
+            ("txt", _) => std::cmp::Ordering::Less,
+            (_, "txt") => std::cmp::Ordering::Greater,
             (ext_a, ext_b) => ext_a.cmp(ext_b),
         }
     });
@@ -144,13 +152,7 @@ pub fn rose_to_gltf(
     let mut skin_index = None;
 
     for file_path in input_files {
-        let file_name = file_path
-            .file_stem()
-            .unwrap_or_default()
-            .to_str()
-            .unwrap_or_default()
-            .to_string();
-
+        let file_name = file_name_from_path(&file_path);
         let file_extension = file_path
             .extension()
             .unwrap_or_default()
@@ -264,6 +266,139 @@ pub fn rose_to_gltf(
                     options.filter_block_y,
                 ) {
                     eprintln!("{:?}", e);
+                }
+            }
+            "txt" => {
+                println!("txt");
+                let text = fs::read_to_string(&file_path).expect("Failed to load TXT");
+                let assets_path =
+                    find_assets_root_path(&file_path).expect("Could not find root assets path");
+                // Create a sampler for deco + cnst to use.
+                let sampler_index = Index::<texture::Sampler>::new(root.samplers.len() as u32);
+                root.samplers.push(texture::Sampler {
+                    name: Some("default_sampler".to_string()),
+                    mag_filter: Some(Checked::Valid(texture::MagFilter::Linear)),
+                    min_filter: Some(Checked::Valid(texture::MinFilter::LinearMipmapLinear)),
+                    wrap_s: Checked::Valid(texture::WrappingMode::ClampToEdge),
+                    wrap_t: Checked::Valid(texture::WrappingMode::ClampToEdge),
+                    extensions: None,
+                    extras: Default::default(),
+                });
+
+                let mut object_list = ObjectList::new(ModelList::new(), sampler_index);
+                text.split('\n')
+                    .map(|s| s.trim().split_whitespace().collect())
+                    .for_each(|split: Vec<&str>| {
+                        println!("{:?}", split);
+                        if split.len() != 2 { return }
+                        let key = split[0];
+                        let value = split[1];
+                        match key {
+                            "obj" => {
+                                object_list.zsc.models.push(Some(Model::default()));
+                            }
+                            "mesh" => {
+                                let mesh_path = value.to_lowercase().replace("\\", "/");
+                                let model_index = object_list.zsc.models.len() - 1;
+                                if let Some(model) = object_list.zsc.models[model_index].as_mut() {
+                                    println!("Added mesh to object_list");
+                                    model.parts.push(ModelPart {
+                                        mesh_path,
+                                        ..Default::default()
+                                    })
+                                }
+                            }
+                            "mat" => {
+                                let mat_path = value.to_lowercase().replace("\\", "/");
+                                let model_index = object_list.zsc.models.len() - 1;
+                                if let Some(model) = object_list.zsc.models[model_index].as_mut() {
+                                    println!("Added mat to object_list");
+                                    let part_index = model.parts.len() - 1;
+                                    let part = &mut model.parts[part_index];
+                                    part.material = Some(ModelMaterial {
+                                        path: mat_path,
+                                        ..Default::default()
+                                    })
+                                }
+                            }
+                            "isskin" => {
+                                let model_index = object_list.zsc.models.len() - 1;
+                                if let Some(model) = object_list.zsc.models[model_index].as_mut() {
+                                    let part_index = model.parts.len() - 1;
+                                    if let Some(material) = model.parts[part_index].material.as_mut() {
+                                        material.is_skin = value == "1";
+                                    }
+                                }
+                            }
+                            "alpha" => {
+                                let model_index = object_list.zsc.models.len() - 1;
+                                if let Some(model) = object_list.zsc.models[model_index].as_mut() {
+                                    let part_index = model.parts.len() - 1;
+                                    if let Some(material) = model.parts[part_index].material.as_mut() {
+                                        material.alpha_enabled = value == "1";
+                                    }
+                                }
+                            }
+                            "twoside" => {
+                                let model_index = object_list.zsc.models.len() - 1;
+                                if let Some(model) = object_list.zsc.models[model_index].as_mut() {
+                                    let part_index = model.parts.len() - 1;
+                                    if let Some(material) = model.parts[part_index].material.as_mut() {
+                                        material.two_sided = value == "1";
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    });
+                let object_id = 0;
+                let _ = object_list.load_object("test", object_id, &mut root, &mut binary_data, &assets_path);
+                if let Some(object) = &object_list.zsc.models[object_id] {
+                    for part in object.parts.iter() {
+                        let mesh_data = object_list
+                            .meshes
+                            .get(&part.mesh_path)
+                            .expect("Missing mesh");
+                        let mesh_index = root.meshes.len() as u32;
+                        root.meshes.push(gltf_json::Mesh {
+                            name: Some("test_mesh".to_owned()),
+                            extensions: Default::default(),
+                            extras: Default::default(),
+                            primitives: vec![Primitive {
+                                attributes: mesh_data.attributes.clone(),
+                                extensions: Default::default(),
+                                extras: Default::default(),
+                                indices: Some(mesh_data.indices),
+                                material: part
+                                    .material
+                                    .as_ref()
+                                    .and_then(|material| object_list.materials.get(material).copied()),
+                                mode: Checked::Valid(Mode::Triangles),
+                                targets: None,
+                            }],
+                            weights: None,
+                        });
+                        let node_index = Index::new(root.nodes.len() as u32);
+                        root.nodes.push(scene::Node {
+                            name: Some("test_scene".to_owned()),
+                            camera: None,
+                            children: None,
+                            extensions: Default::default(),
+                            extras: Default::default(),
+                            matrix: None,
+                            mesh: Some(Index::new(mesh_index)),
+                            rotation: None,
+                            scale: None,
+                            translation: None,
+                            skin: if skin_index.is_some() {
+                                skin_index
+                            } else {
+                                None
+                            },
+                            weights: None,
+                        });
+                        root.scenes[0].nodes.push(node_index);
+                    }
                 }
             }
             _ => {

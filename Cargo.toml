@@ -24,7 +24,8 @@ glam = "0.29"
 gltf = "1.4"
 gltf-json = { version = "1.4", features = ["extras", "KHR_lights_punctual"] }
 human-sort = "0.2"
-image = { version = "0.25" }
+image = { version = "0.25.9" }
+image-extras = { git = "https://github.com/RunDevelopment/image-extras", branch = "dds", features = ["dds"], default-features = false }
 num-derive = "0.4"
 num-traits = "0.2"
 pretty_assertions = "1.4"

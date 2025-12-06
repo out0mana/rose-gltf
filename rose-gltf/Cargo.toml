@@ -16,3 +16,4 @@ rose-file-lib = { path = "../rose-file-lib" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 image = { workspace = true }
+image-extras = { workspace = true }

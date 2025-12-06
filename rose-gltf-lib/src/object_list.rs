@@ -54,6 +54,7 @@ impl ObjectList {
                 if let Some(material_data) =
                     self.load_material(name_prefix, material, root, binary_data, assets_path)
                 {
+                    println!("found material");
                     self.materials.insert(material.clone(), material_data);
                 }
             }
@@ -61,6 +62,7 @@ impl ObjectList {
             if let Some(mesh_data) =
                 self.load_mesh(name_prefix, &part.mesh_path, root, binary_data, assets_path)
             {
+                println!("found mesh");
                 self.meshes.insert(part.mesh_path.clone(), mesh_data);
             }
         }
@@ -78,6 +80,7 @@ impl ObjectList {
     ) -> Option<MeshData> {
         if self.meshes.contains_key(mesh_path) {
             // Already loaded
+            println!("Already loaded mesh");
             return None;
         }
 
@@ -102,6 +105,7 @@ impl ObjectList {
     ) -> Option<Index<material::Material>> {
         if self.materials.contains_key(material) {
             // Already loaded
+            println!("Already loaded material");
             return None;
         }
 

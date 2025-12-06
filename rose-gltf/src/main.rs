@@ -40,6 +40,8 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
+    image_extras::register();
+
     let args = Args::parse();
 
     if args.input.iter().any(|x| {
