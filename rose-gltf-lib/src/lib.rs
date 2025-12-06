@@ -22,7 +22,7 @@ use rose_file_lib::{
     files::{
         STB, ZMD, ZMO, ZMS, ZON, ZSC, zmd::Bone, zms::{Vertex, VertexFormat}, zsc::{Model, ModelList, ModelMaterial, ModelPart}
     },
-    io::RoseFile,
+    io::{PathRoseExt, RoseFile},
     utils::{Quaternion, Vector3},
 };
 
@@ -289,7 +289,7 @@ pub fn rose_to_gltf(
                 text.split('\n')
                     .map(|s| s.trim().split_whitespace().collect())
                     .for_each(|split: Vec<&str>| {
-                        println!("{:?}", split);
+                        // println!("{:?}", split);
                         if split.len() != 2 { return }
                         let key = split[0];
                         let value = split[1];
@@ -301,7 +301,6 @@ pub fn rose_to_gltf(
                                 let mesh_path = value.to_lowercase().replace("\\", "/");
                                 let model_index = object_list.zsc.models.len() - 1;
                                 if let Some(model) = object_list.zsc.models[model_index].as_mut() {
-                                    println!("Added mesh to object_list");
                                     model.parts.push(ModelPart {
                                         mesh_path,
                                         ..Default::default()
@@ -312,7 +311,6 @@ pub fn rose_to_gltf(
                                 let mat_path = value.to_lowercase().replace("\\", "/");
                                 let model_index = object_list.zsc.models.len() - 1;
                                 if let Some(model) = object_list.zsc.models[model_index].as_mut() {
-                                    println!("Added mat to object_list");
                                     let part_index = model.parts.len() - 1;
                                     let part = &mut model.parts[part_index];
                                     part.material = Some(ModelMaterial {
@@ -351,53 +349,56 @@ pub fn rose_to_gltf(
                             _ => {}
                         }
                     });
-                let object_id = 0;
-                let _ = object_list.load_object("test", object_id, &mut root, &mut binary_data, &assets_path);
-                if let Some(object) = &object_list.zsc.models[object_id] {
-                    for part in object.parts.iter() {
-                        let mesh_data = object_list
-                            .meshes
-                            .get(&part.mesh_path)
-                            .expect("Missing mesh");
-                        let mesh_index = root.meshes.len() as u32;
-                        root.meshes.push(gltf_json::Mesh {
-                            name: Some("test_mesh".to_owned()),
-                            extensions: Default::default(),
-                            extras: Default::default(),
-                            primitives: vec![Primitive {
-                                attributes: mesh_data.attributes.clone(),
+                let n_objects = object_list.zsc.models.len() - 1;
+                for object_id in 0..=n_objects {
+                    let _ = object_list.load_object("mesh", object_id, &mut root, &mut binary_data, &assets_path);
+                    if let Some(object) = &object_list.zsc.models[object_id] {
+                        for part in object.parts.iter() {
+                            let name = PathBuf::from(part.mesh_path.clone()).file_stem().unwrap().to_str().unwrap().to_string();
+                            let mesh_data = object_list
+                                .meshes
+                                .get(&part.mesh_path)
+                                .expect("Missing mesh");
+                            let mesh_index = root.meshes.len() as u32;
+                            root.meshes.push(gltf_json::Mesh {
+                                name: Some(name.clone()),
                                 extensions: Default::default(),
                                 extras: Default::default(),
-                                indices: Some(mesh_data.indices),
-                                material: part
-                                    .material
-                                    .as_ref()
-                                    .and_then(|material| object_list.materials.get(material).copied()),
-                                mode: Checked::Valid(Mode::Triangles),
-                                targets: None,
-                            }],
-                            weights: None,
-                        });
-                        let node_index = Index::new(root.nodes.len() as u32);
-                        root.nodes.push(scene::Node {
-                            name: Some("test_scene".to_owned()),
-                            camera: None,
-                            children: None,
-                            extensions: Default::default(),
-                            extras: Default::default(),
-                            matrix: None,
-                            mesh: Some(Index::new(mesh_index)),
-                            rotation: None,
-                            scale: None,
-                            translation: None,
-                            skin: if skin_index.is_some() {
-                                skin_index
-                            } else {
-                                None
-                            },
-                            weights: None,
-                        });
-                        root.scenes[0].nodes.push(node_index);
+                                primitives: vec![Primitive {
+                                    attributes: mesh_data.attributes.clone(),
+                                    extensions: Default::default(),
+                                    extras: Default::default(),
+                                    indices: Some(mesh_data.indices),
+                                    material: part
+                                        .material
+                                        .as_ref()
+                                        .and_then(|material| object_list.materials.get(material).copied()),
+                                    mode: Checked::Valid(Mode::Triangles),
+                                    targets: None,
+                                }],
+                                weights: None,
+                            });
+                            let node_index = Index::new(root.nodes.len() as u32);
+                            root.nodes.push(scene::Node {
+                                name: Some(name.clone()),
+                                camera: None,
+                                children: None,
+                                extensions: Default::default(),
+                                extras: Default::default(),
+                                matrix: None,
+                                mesh: Some(Index::new(mesh_index)),
+                                rotation: None,
+                                scale: None,
+                                translation: None,
+                                skin: if skin_index.is_some() {
+                                    skin_index
+                                } else {
+                                    None
+                                },
+                                weights: None,
+                            });
+                            root.scenes[0].nodes.push(node_index);
+                        }
                     }
                 }
             }
