@@ -9,8 +9,8 @@ use gltf_json::{
 };
 use image::{DynamicImage, ImageBuffer, Rgba};
 use rose_file_lib::{
-    files::{zsc, ZMS, ZSC},
-    io::RoseFile,
+    files::{ZMS, ZSC, zsc},
+    io::{RoseFile, normalize_path},
 };
 
 use crate::{mesh::load_mesh_data, mesh_builder::MeshData, pad_align};
@@ -106,7 +106,8 @@ impl ObjectList {
         }
 
         let material_id = self.materials.len();
-        let img = match image::open(assets_path.join(&material.path)) {
+        let material_path = &normalize_path(Path::new(&assets_path.join(&material.path))).unwrap();
+        let img = match image::open(material_path) {
             Ok(img) => img,
             Err(error) => {
                 println!("Failed to read {} with error {}", material.path, error);

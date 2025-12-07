@@ -13,7 +13,7 @@ use glam::{Quat, Vec3};
 use gltf::{
     animation::{
         Interpolation, util::{ReadOutputs, Rotations}
-    }, binary, mesh::{Mode, util::{ReadColors, ReadIndices, ReadJoints, ReadTexCoords, ReadWeights}}
+    }, mesh::{Mode, util::{ReadColors, ReadIndices, ReadJoints, ReadTexCoords, ReadWeights}}
 };
 use gltf_json::{
     Index, buffer, mesh::Primitive, scene, texture, validation::{Checked, USize64}
@@ -22,7 +22,7 @@ use rose_file_lib::{
     files::{
         STB, ZMD, ZMO, ZMS, ZON, ZSC, zmd::Bone, zms::{Vertex, VertexFormat}, zsc::{Model, ModelList, ModelMaterial, ModelPart}
     },
-    io::{PathRoseExt, RoseFile},
+    io::RoseFile,
     utils::{Quaternion, Vector3},
 };
 
@@ -119,6 +119,9 @@ pub fn rose_to_gltf(
             ("txt", "txt") => std::cmp::Ordering::Equal,
             ("txt", _) => std::cmp::Ordering::Less,
             (_, "txt") => std::cmp::Ordering::Greater,
+            ("zsc", "zsc") => std::cmp::Ordering::Equal,
+            ("zsc", _) => std::cmp::Ordering::Less,
+            (_, "zsc") => std::cmp::Ordering::Greater,
             (ext_a, ext_b) => ext_a.cmp(ext_b),
         }
     });
@@ -268,8 +271,82 @@ pub fn rose_to_gltf(
                     eprintln!("{:?}", e);
                 }
             }
+            "zsc" => {
+                let path = file_path.as_path();
+                let mut zsc = ZSC::new();
+                let _ = zsc.read_from_path(path);
+                let assets_path =
+                    find_assets_root_path(&file_path).expect("Could not find root assets path");
+                // Create a sampler for deco + cnst to use.
+                let sampler_index = Index::<texture::Sampler>::new(root.samplers.len() as u32);
+                root.samplers.push(texture::Sampler {
+                    name: Some("default_sampler".to_string()),
+                    mag_filter: Some(Checked::Valid(texture::MagFilter::Linear)),
+                    min_filter: Some(Checked::Valid(texture::MinFilter::LinearMipmapLinear)),
+                    wrap_s: Checked::Valid(texture::WrappingMode::ClampToEdge),
+                    wrap_t: Checked::Valid(texture::WrappingMode::ClampToEdge),
+                    extensions: None,
+                    extras: Default::default(),
+                });
+                let mut object_list = ObjectList::new(zsc, sampler_index);
+                let mut parts_added = HashMap::<String, bool>::new();
+                let n_objects = object_list.zsc.models.len() - 1;
+                for object_id in 0..=n_objects {
+                    let _ = object_list.load_object("mesh", object_id, &mut root, &mut binary_data, &assets_path);
+                    if let Some(object) = &object_list.zsc.models[object_id] {
+                        for part in object.parts.iter() {
+                            let name = PathBuf::from(part.mesh_path.clone()).file_stem().unwrap().to_str().unwrap().to_string();
+                            let mesh_data = object_list
+                                .meshes
+                                .get(&part.mesh_path)
+                                .expect("Missing mesh");
+                            if !parts_added.contains_key(&part.mesh_path) {
+                                let mesh_index = root.meshes.len() as u32;
+                                root.meshes.push(gltf_json::Mesh {
+                                    name: Some(name.clone()),
+                                    extensions: Default::default(),
+                                    extras: Default::default(),
+                                    primitives: vec![Primitive {
+                                        attributes: mesh_data.attributes.clone(),
+                                        extensions: Default::default(),
+                                        extras: Default::default(),
+                                        indices: Some(mesh_data.indices),
+                                        material: part
+                                            .material
+                                            .as_ref()
+                                            .and_then(|material| object_list.materials.get(material).copied()),
+                                        mode: Checked::Valid(Mode::Triangles),
+                                        targets: None,
+                                    }],
+                                    weights: None,
+                                });
+                                let node_index = Index::new(root.nodes.len() as u32);
+                                root.nodes.push(scene::Node {
+                                    name: Some(name.clone()),
+                                    camera: None,
+                                    children: None,
+                                    extensions: Default::default(),
+                                    extras: Default::default(),
+                                    matrix: None,
+                                    mesh: Some(Index::new(mesh_index)),
+                                    rotation: None,
+                                    scale: None,
+                                    translation: None,
+                                    skin: if skin_index.is_some() {
+                                        skin_index
+                                    } else {
+                                        None
+                                    },
+                                    weights: None,
+                                });
+                                root.scenes[0].nodes.push(node_index);
+                                parts_added.insert(part.mesh_path.clone(), true);
+                            }
+                        }
+                    }
+                }
+            }
             "txt" => {
-                println!("txt");
                 let text = fs::read_to_string(&file_path).expect("Failed to load TXT");
                 let assets_path =
                     find_assets_root_path(&file_path).expect("Could not find root assets path");

@@ -2,6 +2,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::io::SeekFrom;
+use std::path::Path;
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -10,7 +11,7 @@ use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::error::RoseLibError;
-use crate::io::{ReadRoseExt, RoseFile, WriteRoseExt};
+use crate::io::{ReadRoseExt, RoseFile, WriteRoseExt, normalize_path};
 use crate::utils::{BoundingBox, BoundingCylinder, Color3, Quaternion, Vector2, Vector3};
 
 pub type ZSC = ModelList;
@@ -352,8 +353,9 @@ impl RoseFile for ModelList {
             for _ in 0..part_count {
                 let mesh_index = reader.read_i16()?;
                 let material_index = reader.read_i16()?;
+                let mesh_path = normalize_path(Path::new(&meshes[mesh_index as usize])).unwrap();
                 let mut part = ModelPart {
-                    mesh_path: meshes[mesh_index as usize].clone(),
+                    mesh_path,
                     material: if material_index >= 0 {
                         Some(materials[material_index as usize].clone())
                     } else {
