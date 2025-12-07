@@ -302,51 +302,49 @@ pub fn rose_to_gltf(
                     if let Some(object) = &object_list.zsc.models[object_id] {
                         for part in object.parts.iter() {
                             let name = PathBuf::from(part.mesh_path.clone()).file_stem().unwrap().to_str().unwrap().to_string();
-                            let mesh_data = object_list
-                                .meshes
-                                .get(&part.mesh_path)
-                                .expect("Missing mesh");
-                            if !parts_added.contains_key(&part.mesh_path) {
-                                let mesh_index = root.meshes.len() as u32;
-                                root.meshes.push(gltf_json::Mesh {
-                                    name: Some(name.clone()),
-                                    extensions: Default::default(),
-                                    extras: Default::default(),
-                                    primitives: vec![Primitive {
-                                        attributes: mesh_data.attributes.clone(),
+                            if let Some(mesh_data) = object_list.meshes.get(&part.mesh_path) {
+                                if !parts_added.contains_key(&part.mesh_path) {
+                                    let mesh_index = root.meshes.len() as u32;
+                                    root.meshes.push(gltf_json::Mesh {
+                                        name: Some(name.clone()),
                                         extensions: Default::default(),
                                         extras: Default::default(),
-                                        indices: Some(mesh_data.indices),
-                                        material: part
-                                            .material
-                                            .as_ref()
-                                            .and_then(|material| object_list.materials.get(material).copied()),
-                                        mode: Checked::Valid(Mode::Triangles),
-                                        targets: None,
-                                    }],
-                                    weights: None,
-                                });
-                                let node_index = Index::new(root.nodes.len() as u32);
-                                root.nodes.push(scene::Node {
-                                    name: Some(name.clone()),
-                                    camera: None,
-                                    children: None,
-                                    extensions: Default::default(),
-                                    extras: Default::default(),
-                                    matrix: None,
-                                    mesh: Some(Index::new(mesh_index)),
-                                    rotation: None,
-                                    scale: None,
-                                    translation: None,
-                                    skin: if skin_index.is_some() {
-                                        skin_index
-                                    } else {
-                                        None
-                                    },
-                                    weights: None,
-                                });
-                                root.scenes[0].nodes.push(node_index);
-                                parts_added.insert(part.mesh_path.clone(), true);
+                                        primitives: vec![Primitive {
+                                            attributes: mesh_data.attributes.clone(),
+                                            extensions: Default::default(),
+                                            extras: Default::default(),
+                                            indices: Some(mesh_data.indices),
+                                            material: part
+                                                .material
+                                                .as_ref()
+                                                .and_then(|material| object_list.materials.get(material).copied()),
+                                            mode: Checked::Valid(Mode::Triangles),
+                                            targets: None,
+                                        }],
+                                        weights: None,
+                                    });
+                                    let node_index = Index::new(root.nodes.len() as u32);
+                                    root.nodes.push(scene::Node {
+                                        name: Some(name.clone()),
+                                        camera: None,
+                                        children: None,
+                                        extensions: Default::default(),
+                                        extras: Default::default(),
+                                        matrix: None,
+                                        mesh: Some(Index::new(mesh_index)),
+                                        rotation: None,
+                                        scale: None,
+                                        translation: None,
+                                        skin: if skin_index.is_some() {
+                                            skin_index
+                                        } else {
+                                            None
+                                        },
+                                        weights: None,
+                                    });
+                                    root.scenes[0].nodes.push(node_index);
+                                    parts_added.insert(part.mesh_path.clone(), true);
+                                }
                             }
                         }
                     }

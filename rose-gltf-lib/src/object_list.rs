@@ -81,15 +81,25 @@ impl ObjectList {
             return None;
         }
 
-        let zms = ZMS::from_path(&assets_path.join(mesh_path)).expect("Failed to load ZMS");
-        let mesh_id = self.meshes.len();
-        Some(load_mesh_data(
-            root,
-            binary_data,
-            &format!("{}_mesh_{}", name_prefix, mesh_id),
-            &zms,
-            true, // Seems like lots of objects have busted normals
-        ))
+        let zms = ZMS::from_path(&assets_path.join(mesh_path));//.expect("Failed to load ZMS");
+        match zms {
+            Ok(zms) => {
+                let mesh_id = self.meshes.len();
+                Some(load_mesh_data(
+                    root,
+                    binary_data,
+                    &format!("{}_mesh_{}", name_prefix, mesh_id),
+                    &zms,
+                    true, // Seems like lots of objects have busted normals
+                ))
+            }
+            Err(err) => {
+                println!("Failed to load ZMS: {}", err);
+                None
+            }
+        }
+        
+        
     }
 
     pub fn load_material(
