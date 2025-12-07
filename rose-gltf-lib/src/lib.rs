@@ -171,16 +171,22 @@ pub fn rose_to_gltf(
                 skin_index = Some(load_skeleton(&mut root, &mut binary_data, &file_name, &zmd));
             }
             "zmo" => {
-                let zmo = ZMO::from_path(&file_path).expect("Failed to load ZMO");
-
-                if let Some(skin_index) = skin_index {
-                    load_skeletal_animation(
-                        &mut root,
-                        &mut binary_data,
-                        &file_name,
-                        skin_index,
-                        &zmo,
-                    );
+                for entry in glob::glob(file_path.to_str().unwrap()).unwrap() {
+                    match entry {
+                        Ok(path) => {
+                            let zmo: rose_file_lib::files::zmo::Motion = ZMO::from_path(&path).expect("Failed to load ZMO");
+                            if let Some(skin_index) = skin_index {
+                                load_skeletal_animation(
+                                    &mut root,
+                                    &mut binary_data,
+                                    &file_name,
+                                    skin_index,
+                                    &zmo,
+                                );
+                            }
+                        }
+                        Err(e) => println!("{:?}", e),
+                    }
                 }
             }
             "zms" => {
