@@ -2,7 +2,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::io::SeekFrom;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -24,6 +24,7 @@ pub struct ModelList {
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Model {
+    pub name: String,
     pub bounding_cylinder: BoundingCylinder,
     pub bounding_box: BoundingBox<f32>,
     pub parts: Vec<ModelPart>,
@@ -354,6 +355,9 @@ impl RoseFile for ModelList {
                 let mesh_index = reader.read_i16()?;
                 let material_index = reader.read_i16()?;
                 let mesh_path = normalize_path(Path::new(&meshes[mesh_index as usize])).unwrap();
+                if model.name == "" {
+                    model.name = PathBuf::from(mesh_path.clone()).file_stem().unwrap().to_str().unwrap().to_string();
+                }
                 let mut part = ModelPart {
                     mesh_path,
                     material: if material_index >= 0 {

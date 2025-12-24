@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
@@ -129,7 +130,7 @@ pub fn rose_to_gltf(
     let mut binary_data = BytesMut::with_capacity(8 * 1024 * 1024);
     let mut root = gltf_json::Root::default();
     root.scenes.push(gltf_json::Scene {
-        name: None,
+        name: Some("Test Name".to_string()),
         extensions: Default::default(),
         extras: Some(
             RawValue::from_string(
@@ -300,6 +301,7 @@ pub fn rose_to_gltf(
                 for object_id in 0..=n_objects {
                     let _ = object_list.load_object("mesh", object_id, &mut root, &mut binary_data, &assets_path);
                     if let Some(object) = &object_list.zsc.models[object_id] {
+                        let scene_index = root.scenes.len();
                         for part in object.parts.iter() {
                             let name = PathBuf::from(part.mesh_path.clone()).file_stem().unwrap().to_str().unwrap().to_string();
                             if let Some(mesh_data) = object_list.meshes.get(&part.mesh_path) {
@@ -342,7 +344,16 @@ pub fn rose_to_gltf(
                                         },
                                         weights: None,
                                     });
-                                    root.scenes[0].nodes.push(node_index);
+                                    // Only create scene if it has a valid part
+                                    if scene_index == root.scenes.len() {
+                                        root.scenes.push(gltf_json::Scene {
+                                            name: Some(object.name.clone()),
+                                            extensions: Default::default(),
+                                            extras: Default::default(),
+                                            nodes: Default::default(),
+                                        });
+                                    }
+                                    root.scenes[scene_index].nodes.push(node_index);
                                     parts_added.insert(part.mesh_path.clone(), true);
                                 }
                             }
