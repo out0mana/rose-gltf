@@ -57,13 +57,13 @@ fn generate_terrain_materials(
     let texture_tile_size = texture_size / 16;
     let mut tile_images = Vec::with_capacity(zon.textures.len());
 
-    for tile_texure_path in zon.textures.iter() {
-        if tile_texure_path == "end" {
+    for tile_texture_path in zon.textures.iter() {
+        if tile_texture_path == "end" {
             break;
         }
-
+        let normalized = &tile_texture_path.to_ascii_lowercase().replace('\\',"/");
         let mut tile_image =
-            image::open(assets_path.join(tile_texure_path)).expect("Failed to load DDS");
+            image::open(assets_path.join(normalized)).expect("Failed to load DDS");
         if tile_image.width() != texture_tile_size {
             tile_image = tile_image.resize(
                 texture_tile_size,
@@ -848,7 +848,7 @@ fn load_object_instance(
         });
 
         if let Some(animation_path) = part.animation_path.as_ref() {
-            let animation_path = assets_path.join(animation_path);
+            let animation_path = assets_path.join(animation_path.to_ascii_lowercase());
             if let Ok(zmo) = ZMO::from_path(&animation_path) {
                 let name = format!(
                     "{}_{}_{}_{}_{}_anim",

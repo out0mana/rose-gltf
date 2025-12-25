@@ -1,4 +1,3 @@
-use core::fmt;
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
@@ -96,6 +95,61 @@ pub fn file_name_from_path (
         .to_str()
         .unwrap_or_default()
         .to_string();
+}
+
+pub fn get_deco_and_cnst_paths(
+    file_path: &PathBuf,
+    assets_path: &PathBuf
+) -> Option<[PathBuf; 2]> {
+    let relative_zon_path = file_path.strip_prefix(&assets_path).unwrap();
+    let stb_path = &assets_path.join("3ddata/stb/list_zone.stb");
+    let csv_path = &assets_path.join("3ddata/stb/list_zone.stb.csv");
+    if stb_path.exists() {
+        let list_zone = STB::from_path(stb_path)
+            .expect("Failed to load list_zone.stb");
+        let zone_id = (|| {
+            for row in 1..list_zone.rows() {
+                if let Some(row_zon) = list_zone.value(row, 2) {
+                    if Path::new(&row_zon.to_ascii_lowercase()) == relative_zon_path {
+                        return Some(row);
+                    }
+                }
+            }
+            None
+        })()
+        .expect("Could not find zone id");
+        Some([
+            assets_path.join(Path::new(list_zone.value(zone_id, 12).unwrap())), // deco
+            assets_path.join(Path::new(list_zone.value(zone_id, 13).unwrap())) // cnst
+        ])
+    } else if csv_path.exists() {
+        // println!("{}", relative_zon_path.to_string_lossy());
+        let mut csv = csv::Reader::from_path(csv_path).expect("Failed to load list_zone.stb.csv");
+        let deco_cnst = (|| {
+            for row in csv.records() {
+                let row = row.expect("Failed to read csv row");
+                let r2_norm = &row[2].to_ascii_lowercase()
+                    // .replace("\\\\", "/")
+                    .replace('\\', "/");
+                if Path::new(r2_norm) == relative_zon_path {
+                    let r12_norm = &row[12].to_ascii_lowercase()
+                        .replace("\\\\", "/")
+                        .replace("\\","/");
+                    let r13_norm = &row[13].to_ascii_lowercase()
+                        .replace("\\\\", "/")
+                        .replace("\\","/");
+                    return Some([
+                        assets_path.join(Path::new(r12_norm)), // deco
+                        assets_path.join(Path::new(r13_norm)) // cnst
+                    ])
+                }
+            }
+            None
+        })().expect("Could not find zone id");
+        Some(deco_cnst)
+    } else {
+        None
+    }
 }
 
 pub fn rose_to_gltf(
@@ -222,60 +276,43 @@ pub fn rose_to_gltf(
                     .to_path_buf();
                 let assets_path =
                     find_assets_root_path(&file_path).expect("Could not find root assets path");
-                let relative_zon_path = file_path.strip_prefix(&assets_path).unwrap();
+                
+                if let Some(deco_and_csnt_paths) = get_deco_and_cnst_paths(&file_path, &assets_path) {
+                    let deco_models = ZSC::from_path(&deco_and_csnt_paths[0])
+                        .expect("Failed to read deco zsc");
+                    let cnst_models = ZSC::from_path(&deco_and_csnt_paths[1])
+                        .expect("Failed to read cnst zsc");
 
-                let list_zone = STB::from_path(&assets_path.join("3ddata/stb/list_zone.stb"))
-                    .expect("Failed to load list_zone.stb");
-                let zone_id = (|| {
-                    for row in 1..list_zone.rows() {
-                        if let Some(row_zon) = list_zone.value(row, 2) {
-                            if Path::new(&row_zon.to_ascii_lowercase()) == relative_zon_path {
-                                return Some(row);
-                            }
-                        }
+                    // Create a sampler for deco + cnst to use.
+                    let sampler_index = Index::<texture::Sampler>::new(root.samplers.len() as u32);
+                    root.samplers.push(texture::Sampler {
+                        name: Some("default_sampler".to_string()),
+                        mag_filter: Some(Checked::Valid(texture::MagFilter::Linear)),
+                        min_filter: Some(Checked::Valid(texture::MinFilter::LinearMipmapLinear)),
+                        wrap_s: Checked::Valid(texture::WrappingMode::ClampToEdge),
+                        wrap_t: Checked::Valid(texture::WrappingMode::ClampToEdge),
+                        extensions: None,
+                        extras: Default::default(),
+                    });
+
+                    let zon = ZON::from_path(&file_path).expect("Failed to load ZON");
+                    let mut deco = ObjectList::new(deco_models, sampler_index);
+                    let mut cnst = ObjectList::new(cnst_models, sampler_index);
+
+                    if let Err(e) = load_zone(
+                        &mut root,
+                        &mut binary_data,
+                        &zon,
+                        assets_path,
+                        map_path,
+                        &mut deco,
+                        &mut cnst,
+                        options.use_better_heightmap_triangles,
+                        options.filter_block_x,
+                        options.filter_block_y,
+                    ) {
+                        eprintln!("{:?}", e);
                     }
-                    None
-                })()
-                .expect("Could not find zone id");
-
-                let deco_models = ZSC::from_path(
-                    &assets_path.join(Path::new(list_zone.value(zone_id, 12).unwrap())),
-                )
-                .expect("Failed to read deco zsc");
-                let cnst_models = ZSC::from_path(
-                    &assets_path.join(Path::new(list_zone.value(zone_id, 13).unwrap())),
-                )
-                .expect("Failed to read cnst zsc");
-
-                // Create a sampler for deco + cnst to use.
-                let sampler_index = Index::<texture::Sampler>::new(root.samplers.len() as u32);
-                root.samplers.push(texture::Sampler {
-                    name: Some("default_sampler".to_string()),
-                    mag_filter: Some(Checked::Valid(texture::MagFilter::Linear)),
-                    min_filter: Some(Checked::Valid(texture::MinFilter::LinearMipmapLinear)),
-                    wrap_s: Checked::Valid(texture::WrappingMode::ClampToEdge),
-                    wrap_t: Checked::Valid(texture::WrappingMode::ClampToEdge),
-                    extensions: None,
-                    extras: Default::default(),
-                });
-
-                let zon = ZON::from_path(&file_path).expect("Failed to load ZON");
-                let mut deco = ObjectList::new(deco_models, sampler_index);
-                let mut cnst = ObjectList::new(cnst_models, sampler_index);
-
-                if let Err(e) = load_zone(
-                    &mut root,
-                    &mut binary_data,
-                    &zon,
-                    assets_path,
-                    map_path,
-                    &mut deco,
-                    &mut cnst,
-                    options.use_better_heightmap_triangles,
-                    options.filter_block_x,
-                    options.filter_block_y,
-                ) {
-                    eprintln!("{:?}", e);
                 }
             }
             "zsc" => {
